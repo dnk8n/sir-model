@@ -27,43 +27,63 @@ import Round
 type alias Model =
     { r0 : Float
     , sData : List Int
+    , iData : List Int
+    , rData : List Int
     , t : Int
+    , seed : Int
     }
-
-
-type Msg
-    = IncrementR0
-    | DecrementR0
-    | Step
 
 
 main : Program () Model Msg
 main =
     Browser.element
-        { init =
-            \_ ->
-                ( { r0 = 1.4
-                  , sData = [ 999 ]
-                  , t = 0
-                  }
-                , Cmd.none
-                )
+        { init = initial
         , view = view
         , update = update
         , subscriptions = \_ -> Sub.none
         }
 
 
+initial =
+    \_ ->
+        ( { r0 = 1.4
+          , sData = [ 999 ]
+          , iData = [ 1 ]
+          , rData = [ 0 ]
+          , t = 0
+          , seed = 2343
+          }
+        , Cmd.none
+        )
+
+
 view : Model -> Html.Html Msg
-view { r0, sData, t } =
+view { r0, sData, iData, rData, t, seed } =
+    let
+        s =
+            Maybe.withDefault 0 <| List.head sData
+
+        i =
+            Maybe.withDefault 0 <| List.head iData
+
+        r =
+            Maybe.withDefault 0 <| List.head rData
+    in
     El.layout []
         (El.column [ El.centerX ]
             [ headerEl
-            , inputSectionEl r0
-            , viewSectionEl sData t
+            , inputSectionEl r0 seed
+            , viewSectionEl sData t s i r
             , controlSectionEl
             ]
         )
+
+
+type Msg
+    = IncrementR0
+    | DecrementR0
+    | Step
+    | Random
 
 
 update msg model =
@@ -80,11 +100,24 @@ update msg model =
 
         Step ->
             ( { model
-                | sData = model.sData ++ [ 940 ]
+                | sData = 940 :: model.sData
                 , t = model.t + 1
               }
             , Cmd.none
             )
+
+        Random ->
+            let
+                seedGenerator =
+                    Random.int Random.minInt Random.maxInt
+
+                rndSeed =
+                    Random.initialSeed model.seed
+
+                ( newSeedInt, _ ) =
+                    Random.step seedGenerator rndSeed
+            in
+            ( { model | seed = newSeedInt }, Cmd.none )
 
 
 headerEl =
@@ -92,16 +125,16 @@ headerEl =
         (El.text "INFECTIOUS DISEASE SIMULATION")
 
 
-inputSectionEl r0 =
+inputSectionEl r0 seed =
     El.row [ El.centerX, El.spacing space ]
         [ r0InputElement r0
-        , seedInputElement
+        , seedInputElement seed
         ]
 
 
 r0InputElement r0 =
     El.row [ El.spacing 5 ]
-        [ El.text "R0"
+        [ El.text "R0 ="
         , El.text <| Round.round 2 r0
         , if r0 > 0.05 then
             buttonElement "-" DecrementR0
@@ -112,16 +145,16 @@ r0InputElement r0 =
         ]
 
 
-seedInputElement =
+seedInputElement seed =
     El.row [ El.spacing 5, smallFont ]
-        [ El.text "Seed"
-        , El.text "329847"
-        , El.text "random"
+        [ El.text "Seed ="
+        , El.text <| String.fromInt seed
+        , buttonElement "random" Random
         ]
 
 
-viewSectionEl sData t =
-    El.row [] [ chartEl sData, stateEl t ]
+viewSectionEl sData t s i r =
+    El.row [] [ chartEl sData, stateEl t s i r ]
 
 
 chartEl sData =
@@ -132,18 +165,18 @@ chartEl sData =
         (El.html <| chart sData)
 
 
-stateEl t =
+stateEl t s i r =
     El.column [ El.alignTop ]
-        [ sirStateEl
-        , El.el [ El.centerX ] (El.text <| "t=" ++ String.fromInt t)
+        [ sirStateEl s i r
+        , El.el [ El.centerX ] (El.text <| "t = " ++ String.fromInt t)
         ]
 
 
-sirStateEl =
+sirStateEl s i r =
     El.row []
-        [ bar "S" 870 green
-        , bar "I" 30 red
-        , bar "R" 100 blue
+        [ bar "S" s green
+        , bar "I" i red
+        , bar "R" r blue
         ]
 
 
@@ -218,14 +251,14 @@ chart sData =
         seed2 =
             Random.initialSeed 999
 
-        ( chart1, _ ) =
+        ( iChart, _ ) =
             Random.step randomChart seed1
 
         chart2point index y =
             { x = toFloat index, y = toFloat y }
 
-        chart2 =
-            List.indexedMap chart2point sData
+        sChart =
+            List.indexedMap chart2point (List.reverse sData)
     in
     LineChart.viewCustom
         { x = Axis.default 700 "X" .x
@@ -241,8 +274,8 @@ chart sData =
         , line = Line.default
         , dots = Dots.default
         }
-        [ LineChart.line Colors.green Dots.square "Susceptible" chart1
-        , LineChart.line Colors.red Dots.plus "Infected" chart2
+        [ LineChart.line Colors.green Dots.square "Infected" iChart
+        , LineChart.line Colors.red Dots.plus "Susceptible" sChart
         ]
 
 
