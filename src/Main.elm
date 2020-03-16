@@ -25,18 +25,29 @@ import Round
 
 
 type alias Model =
-    { r0 : Float }
+    { r0 : Float
+    , sData : List Int
+    , t : Int
+    }
 
 
 type Msg
     = IncrementR0
     | DecrementR0
+    | Step
 
 
 main : Program () Model Msg
 main =
     Browser.element
-        { init = \_ -> ( { r0 = 1.4 }, Cmd.none )
+        { init =
+            \_ ->
+                ( { r0 = 1.4
+                  , sData = [ 999 ]
+                  , t = 0
+                  }
+                , Cmd.none
+                )
         , view = view
         , update = update
         , subscriptions = \_ -> Sub.none
@@ -44,12 +55,12 @@ main =
 
 
 view : Model -> Html.Html Msg
-view { r0 } =
+view { r0, sData, t } =
     El.layout []
         (El.column [ El.centerX ]
             [ headerEl
             , inputSectionEl r0
-            , viewSectionEl
+            , viewSectionEl sData t
             , controlSectionEl
             ]
         )
@@ -64,6 +75,14 @@ update msg model =
 
         DecrementR0 ->
             ( { model | r0 = model.r0 - 0.05 }
+            , Cmd.none
+            )
+
+        Step ->
+            ( { model
+                | sData = model.sData ++ [ 940 ]
+                , t = model.t + 1
+              }
             , Cmd.none
             )
 
@@ -101,22 +120,22 @@ seedInputElement =
         ]
 
 
-viewSectionEl =
-    El.row [] [ chartEl, stateEl ]
+viewSectionEl sData t =
+    El.row [] [ chartEl sData, stateEl t ]
 
 
-chartEl =
+chartEl sData =
     El.el
         [ El.width <| El.px 400
         , El.height <| El.px 200
         ]
-        (El.html chart)
+        (El.html <| chart sData)
 
 
-stateEl =
+stateEl t =
     El.column [ El.alignTop ]
         [ sirStateEl
-        , El.el [ El.centerX ] (El.text "t=5")
+        , El.el [ El.centerX ] (El.text <| "t=" ++ String.fromInt t)
         ]
 
 
@@ -158,7 +177,7 @@ controlSectionEl =
         , El.spacing space
         , ElBorder.width 1
         ]
-        [ El.el [ El.centerX ] (El.text "Step")
+        [ El.el [ El.centerX ] <| buttonElement "Step" Step
         , El.row [ El.spacing space ]
             [ El.text "<<"
             , El.text ">"
@@ -190,8 +209,8 @@ randomChart =
         |> Random.andThen (\len -> Random.list len randomPoint)
 
 
-chart : Html.Html msg
-chart =
+chart : List Int -> Html.Html msg
+chart sData =
     let
         seed1 =
             Random.initialSeed 1003
@@ -202,8 +221,11 @@ chart =
         ( chart1, _ ) =
             Random.step randomChart seed1
 
-        ( chart2, _ ) =
-            Random.step randomChart seed2
+        chart2point index y =
+            { x = toFloat index, y = toFloat y }
+
+        chart2 =
+            List.indexedMap chart2point sData
     in
     LineChart.viewCustom
         { x = Axis.default 700 "X" .x
@@ -219,8 +241,8 @@ chart =
         , line = Line.default
         , dots = Dots.default
         }
-        [ LineChart.line Colors.blueLight Dots.square "Chuck" chart1
-        , LineChart.line Colors.pinkLight Dots.plus "Alice" chart2
+        [ LineChart.line Colors.green Dots.square "Susceptible" chart1
+        , LineChart.line Colors.red Dots.plus "Infected" chart2
         ]
 
 
