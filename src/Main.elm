@@ -29,6 +29,7 @@ type alias Model =
     , sData : List Int
     , iData : List Int
     , rData : List Int
+    , totalInfected : Int
     , t : Int
     , seed : Int
     }
@@ -52,6 +53,7 @@ initial =
           , rData = [ 0 ]
           , t = 0
           , seed = 2343
+          , totalInfected = 1
           }
         , Cmd.none
         )
@@ -73,7 +75,7 @@ view { r0, sData, iData, rData, t, seed } =
         (El.column [ El.centerX ]
             [ headerEl
             , inputSectionEl r0 seed
-            , viewSectionEl sData t s i r
+            , viewSectionEl sData iData t s i r
             , controlSectionEl
             ]
         )
@@ -99,10 +101,7 @@ update msg model =
             )
 
         Step ->
-            ( { model
-                | sData = 940 :: model.sData
-                , t = model.t + 1
-              }
+            ( step model
             , Cmd.none
             )
 
@@ -118,6 +117,81 @@ update msg model =
                     Random.step seedGenerator rndSeed
             in
             ( { model | seed = newSeedInt }, Cmd.none )
+
+
+step : Model -> Model
+step model =
+    {--explanation.
+        For every time step, S I R containers
+        are updated like this.
+
+        Let dI be the number of individuals
+        that will be contamined in this step.
+
+        dI is decided by, for every individual
+        in S, flipping I_old coins. If any flip
+        turns up 'infected' side, dI is incremented.
+
+        After a little thought, the probability
+        to not be infected with R0 = 2.5, N = 1000
+        and 500 other infected individuals:
+
+          pInfected = (1-2.5/1000) ^ 500
+          pInfected = (1-r0/1000) ^ iPrev
+
+        Think of flipping fair coin, probability
+        to not get any heads once is 1/2; 1/4 to
+        not get any 2 flips, 1/8 for 3 flips and so
+        on.
+
+        So we know probability of
+
+        The new value of S is S_new = S - dI.
+        The new value of I is I_new = dI.
+        The new value of R is R_new = R_old + I_old.
+    --}
+    let
+        p =
+            model.r0 / 1000
+
+        sPrev =
+            Maybe.withDefault 0 <| List.head model.sData
+
+        iPrev =
+            Maybe.withDefault 0 <| List.head model.iData
+
+        rPrev =
+            Maybe.withDefault 0 <| List.head model.rData
+
+        pInfected =
+            (1 - p) ^ toFloat iPrev
+
+        seed =
+            Random.initialSeed model.seed
+
+        -- list of random numbers 0..1 for every susceptible
+        ( rndList, _ ) =
+            Random.step (Random.list sPrev probability) seed
+
+        dI =
+            List.length <| List.filter (\x -> x > pInfected) rndList
+
+        sNew =
+            sPrev - dI
+
+        iNew =
+            dI
+
+        rNew =
+            rPrev + iPrev
+    in
+    { model
+        | sData = sNew :: model.sData
+        , iData = iNew :: model.iData
+        , rData = rNew :: model.rData
+        , totalInfected = model.totalInfected + dI
+        , t = model.t + 1
+    }
 
 
 headerEl =
@@ -153,16 +227,16 @@ seedInputElement seed =
         ]
 
 
-viewSectionEl sData t s i r =
-    El.row [] [ chartEl sData, stateEl t s i r ]
+viewSectionEl sData iData t s i r =
+    El.row [] [ chartEl sData iData, stateEl t s i r ]
 
 
-chartEl sData =
+chartEl sData iData =
     El.el
         [ El.width <| El.px 400
         , El.height <| El.px 200
         ]
-        (El.html <| chart sData)
+        (El.html <| chart sData iData)
 
 
 stateEl t s i r =
@@ -242,27 +316,20 @@ randomChart =
         |> Random.andThen (\len -> Random.list len randomPoint)
 
 
-chart : List Int -> Html.Html msg
-chart sData =
+chart sData iData =
     let
-        seed1 =
-            Random.initialSeed 1003
-
-        seed2 =
-            Random.initialSeed 999
-
-        ( iChart, _ ) =
-            Random.step randomChart seed1
-
         chart2point index y =
             { x = toFloat index, y = toFloat y }
 
         sChart =
             List.indexedMap chart2point (List.reverse sData)
+
+        iChart =
+            List.indexedMap chart2point (List.reverse iData)
     in
     LineChart.viewCustom
-        { x = Axis.default 700 "X" .x
-        , y = Axis.default 400 "Y" .y
+        { x = Axis.default 700 "t" .x
+        , y = Axis.default 400 "n" .y
         , container = Container.responsive "line-chart-1"
         , interpolation = Interpolation.default
         , intersection = Intersection.default
@@ -274,8 +341,8 @@ chart sData =
         , line = Line.default
         , dots = Dots.default
         }
-        [ LineChart.line Colors.green Dots.square "Infected" iChart
-        , LineChart.line Colors.red Dots.plus "Susceptible" sChart
+        [ LineChart.line Colors.red Dots.square "Infected" iChart
+        , LineChart.line Colors.green Dots.plus "Susceptible" sChart
         ]
 
 
@@ -303,15 +370,15 @@ buttonElement buttonText onPressMsg =
 
 
 red =
-    El.rgb 1 0 0
+    El.rgb 1 0.5 0.5
 
 
 green =
-    El.rgb 0 1 0
+    El.rgb 0.5 1 0.5
 
 
 blue =
-    El.rgb 0 0 1
+    El.rgb 0.5 0.5 1
 
 
 lightGray =
@@ -328,6 +395,14 @@ smallFont =
 
 
 -- @remind
+-- Visualize total infected
+-- Keep new seed in model
+-- Add probability for death of infected individual
+--  1) when hospital bed is available
+--  2) when not available
+-- Add hospital beds
+-- Visualize total deaths
+-- Add D to SIR (death data)
 -- Link to Wikipedia model page
 -- Link to YouTube model introduction video
 -- Brief explanation of things/legend?
