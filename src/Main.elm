@@ -62,7 +62,7 @@ initial =
 
 
 view : Model -> Html.Html Msg
-view { r0, sData, iData, rData, t, initialSeed } =
+view { r0, sData, iData, rData, t, initialSeed, totalInfected } =
     let
         s =
             Maybe.withDefault 0 <| List.head sData
@@ -77,7 +77,7 @@ view { r0, sData, iData, rData, t, initialSeed } =
         (El.column [ El.centerX ]
             [ headerEl
             , inputSectionEl r0 initialSeed
-            , viewSectionEl sData iData t s i r
+            , viewSectionEl sData iData t s i r totalInfected
             , controlSectionEl
             ]
         )
@@ -159,9 +159,6 @@ step model =
         The new value of R is R_new = R_old + I_old.
     --}
     let
-        p =
-            model.r0 / 1000
-
         sPrev =
             Maybe.withDefault 0 <| List.head model.sData
 
@@ -170,6 +167,9 @@ step model =
 
         rPrev =
             Maybe.withDefault 0 <| List.head model.rData
+
+        p =
+            model.r0 / toFloat sPrev
 
         pInfected =
             (1 - p) ^ toFloat iPrev
@@ -250,8 +250,15 @@ seedInputElement initialSeed =
         ]
 
 
-viewSectionEl sData iData t s i r =
-    El.row [] [ chartEl sData iData, stateEl t s i r ]
+viewSectionEl sData iData t s i r totalInfected =
+    El.column [ El.centerX ]
+        [ El.el [ El.centerX, El.padding 5 ]
+            (El.text <| "Infected: " ++ String.fromInt totalInfected)
+        , El.row []
+            [ chartEl sData iData
+            , stateEl t s i r
+            ]
+        ]
 
 
 chartEl sData iData =
@@ -422,8 +429,8 @@ smallFont =
 -- Add probability for death of infected individual
 --  1) when hospital bed is available
 --  2) when not available
--- Add hospital beds
 -- Visualize total deaths
+-- Add hospital beds
 -- Add D to SIR (death data)
 -- Link to Wikipedia model page
 -- Link to YouTube model introduction video
