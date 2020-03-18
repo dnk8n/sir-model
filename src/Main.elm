@@ -31,7 +31,8 @@ type alias Model =
     , rData : List Int
     , totalInfected : Int
     , t : Int
-    , seed : Int
+    , initialSeed : Int
+    , seed : Random.Seed
     }
 
 
@@ -52,15 +53,16 @@ initial =
           , iData = [ 1 ]
           , rData = [ 0 ]
           , t = 0
-          , seed = 2343
+          , initialSeed = 2343
           , totalInfected = 1
+          , seed = Random.initialSeed 2343
           }
         , Cmd.none
         )
 
 
 view : Model -> Html.Html Msg
-view { r0, sData, iData, rData, t, seed } =
+view { r0, sData, iData, rData, t, initialSeed } =
     let
         s =
             Maybe.withDefault 0 <| List.head sData
@@ -74,7 +76,7 @@ view { r0, sData, iData, rData, t, seed } =
     El.layout []
         (El.column [ El.centerX ]
             [ headerEl
-            , inputSectionEl r0 seed
+            , inputSectionEl r0 initialSeed
             , viewSectionEl sData iData t s i r
             , controlSectionEl
             ]
@@ -86,6 +88,7 @@ type Msg
     | DecrementR0
     | Step
     | Random
+    | FastForward
 
 
 update msg model =
@@ -111,12 +114,17 @@ update msg model =
                     Random.int Random.minInt Random.maxInt
 
                 rndSeed =
-                    Random.initialSeed model.seed
+                    Random.initialSeed model.initialSeed
 
                 ( newSeedInt, _ ) =
                     Random.step seedGenerator rndSeed
             in
-            ( { model | seed = newSeedInt }, Cmd.none )
+            ( { model | initialSeed = newSeedInt }, Cmd.none )
+
+        FastForward ->
+            ( fastForward model
+            , Cmd.none
+            )
 
 
 step : Model -> Model
@@ -166,12 +174,12 @@ step model =
         pInfected =
             (1 - p) ^ toFloat iPrev
 
-        seed =
-            Random.initialSeed model.seed
+        initialSeed =
+            Random.initialSeed model.initialSeed
 
         -- list of random numbers 0..1 for every susceptible
-        ( rndList, _ ) =
-            Random.step (Random.list sPrev probability) seed
+        ( rndList, newSeed ) =
+            Random.step (Random.list sPrev probability) initialSeed
 
         dI =
             List.length <| List.filter (\x -> x > pInfected) rndList
@@ -191,7 +199,22 @@ step model =
         , rData = rNew :: model.rData
         , totalInfected = model.totalInfected + dI
         , t = model.t + 1
+        , seed = newSeed
     }
+
+
+fastForward model =
+    let
+        currentS =
+            Maybe.withDefault 0 <| List.head model.sData
+
+        currentI =
+            Maybe.withDefault 0 <| List.head model.iData
+
+        currentR =
+            Maybe.withDefault 0 <| List.head model.rData
+    in
+    model
 
 
 headerEl =
@@ -199,10 +222,10 @@ headerEl =
         (El.text "INFECTIOUS DISEASE SIMULATION")
 
 
-inputSectionEl r0 seed =
+inputSectionEl r0 initialSeed =
     El.row [ El.centerX, El.spacing space ]
         [ r0InputElement r0
-        , seedInputElement seed
+        , seedInputElement initialSeed
         ]
 
 
@@ -219,10 +242,10 @@ r0InputElement r0 =
         ]
 
 
-seedInputElement seed =
+seedInputElement initialSeed =
     El.row [ El.spacing 5, smallFont ]
-        [ El.text "Seed ="
-        , El.text <| String.fromInt seed
+        [ El.text "initialSeed ="
+        , El.text <| String.fromInt initialSeed
         , buttonElement "random" Random
         ]
 
@@ -288,7 +311,7 @@ controlSectionEl =
         , El.row [ El.spacing space ]
             [ El.text "<<"
             , El.text ">"
-            , El.text ">>"
+            , buttonElement ">>" FastForward
             ]
         ]
 
@@ -396,7 +419,6 @@ smallFont =
 
 -- @remind
 -- Visualize total infected
--- Keep new seed in model
 -- Add probability for death of infected individual
 --  1) when hospital bed is available
 --  2) when not available
